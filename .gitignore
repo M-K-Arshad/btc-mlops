@@ -1,0 +1,45 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Virtual environment
+.venv/
+venv/
+env/
+
+# Secrets / local config
+.env
+*.env
+secrets/
+
+# Data (re-downloaded by the ETL, so don't commit it)
+data/raw/
+data/processed/
+*.csv
+
+# Models: ignore everything EXCEPT the starter model the Docker image needs
+models/*
+!models/model.pkl
+!models/metrics.json
+
+# Airflow (created by docker compose)
+logs/
+airflow.db
+airflow.cfg
+standalone_admin_password.txt
+webserver_config.py
+
+# Locust / load testing
+*.html
+locust_stats*
+
+# IDE / OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+desktop.ini
