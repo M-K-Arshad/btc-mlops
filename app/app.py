@@ -76,9 +76,7 @@ def predict():
             if STATE["model"] is None:
                 return jsonify(error="Model not loaded"), 503
             model = STATE["model"]
-            start = datetime.strptime(
-                STATE["meta"]["last_date"], "%Y-%m-%d"
-            ).date()
+            start = datetime.strptime(STATE["meta"]["last_date"], "%Y-%m-%d").date()
 
         preds = model.forecast(steps=days)
         forecast = [
@@ -97,9 +95,7 @@ def predict():
 @app.post("/reload")
 def reload_model():
     if load_model():
-        return jsonify(
-            status="reloaded", model_version=STATE["meta"]["version"]
-        )
+        return jsonify(status="reloaded", model_version=STATE["meta"]["version"])
     return jsonify(error="No model found"), 500
 
 

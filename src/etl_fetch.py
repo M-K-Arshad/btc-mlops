@@ -71,6 +71,4 @@ def fetch_btc(out="data/raw/btc.csv", period="2y", days=730):
             return out
         except Exception as e:
             print(f"{name} failed: {e}")
-    raise RuntimeError(
-        "All data sources failed - check your internet connection"
-    )
+    raise RuntimeError("All data sources failed - check your internet connection")
