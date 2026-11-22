@@ -1,0 +1,273 @@
+# PIPELINE DEFINITION
+# Name: btc-forecast-pipeline
+# Description: Ingest BTC data, build features, train 7-day ARIMA forecaster
+# Inputs:
+#    days: int [Default: 730.0]
+#    max_mape: float [Default: 15.0]
+components:
+  comp-build-features:
+    executorLabel: exec-build-features
+    inputDefinitions:
+      artifacts:
+        raw_data:
+          artifactType:
+            schemaTitle: system.Dataset
+            schemaVersion: 0.0.1
+    outputDefinitions:
+      artifacts:
+        processed_data:
+          artifactType:
+            schemaTitle: system.Dataset
+            schemaVersion: 0.0.1
+  comp-ingest-data:
+    executorLabel: exec-ingest-data
+    inputDefinitions:
+      parameters:
+        days:
+          defaultValue: 730.0
+          isOptional: true
+          parameterType: NUMBER_INTEGER
+    outputDefinitions:
+      artifacts:
+        raw_data:
+          artifactType:
+            schemaTitle: system.Dataset
+            schemaVersion: 0.0.1
+  comp-train-model:
+    executorLabel: exec-train-model
+    inputDefinitions:
+      artifacts:
+        processed_data:
+          artifactType:
+            schemaTitle: system.Dataset
+            schemaVersion: 0.0.1
+      parameters:
+        max_mape:
+          defaultValue: 15.0
+          isOptional: true
+          parameterType: NUMBER_DOUBLE
+    outputDefinitions:
+      artifacts:
+        metrics:
+          artifactType:
+            schemaTitle: system.Metrics
+            schemaVersion: 0.0.1
+        model:
+          artifactType:
+            schemaTitle: system.Model
+            schemaVersion: 0.0.1
+deploymentSpec:
+  executors:
+    exec-build-features:
+      container:
+        args:
+        - --executor_input
+        - '{{$}}'
+        - --function_to_execute
+        - build_features
+        command:
+        - sh
+        - -c
+        - "\nif ! [ -x \"$(command -v pip)\" ]; then\n    python3 -m ensurepip ||\
+          \ python3 -m ensurepip --user || apt-get install python3-pip\nfi\n\nPIP_DISABLE_PIP_VERSION_CHECK=1\
+          \ python3 -m pip install --quiet --no-warn-script-location 'pandas==2.2.2'\
+          \ 'numpy==1.26.4' 'scipy==1.13.1' 'statsmodels==0.14.2' 'requests'  && \
+          \ python3 -m pip install --quiet --no-warn-script-location 'kfp==2.18.1'\
+          \ '--no-deps' 'typing-extensions>=3.7.4,<5; python_version<\"3.9\"' && \"\
+          $0\" \"$@\"\n"
+        - sh
+        - -ec
+        - 'program_path=$(mktemp -d)
+
+
+          printf "%s" "$0" > "$program_path/ephemeral_component.py"
+
+          _KFP_RUNTIME=true python3 -m kfp.dsl.executor_main                         --component_module_path                         "$program_path/ephemeral_component.py"                         "$@"
+
+          '
+        - "\nimport kfp\nfrom kfp import dsl\nfrom kfp.dsl import *\nfrom typing import\
+          \ *\n\ndef build_features(raw_data: Input[Dataset], processed_data: Output[Dataset]):\n\
+          \    \"\"\"Clean data and add MA7, MA30 and 7-day volatility.\"\"\"\n  \
+          \  import pandas as pd\n\n    df = pd.read_csv(raw_data.path, parse_dates=[\"\
+          Date\"]).dropna()\n    df = df.sort_values(\"Date\")\n    df[\"MA7\"] =\
+          \ df[\"Close\"].rolling(7).mean()\n    df[\"MA30\"] = df[\"Close\"].rolling(30).mean()\n\
+          \    df[\"Volatility7\"] = df[\"Close\"].pct_change().rolling(7).std()\n\
+          \    df = df.dropna()\n    df.to_csv(processed_data.path, index=False)\n\
+          \    print(f\"Features built: {len(df)} rows, columns={list(df.columns)}\"\
+          )\n\n"
+        image: python:3.10-slim
+        resources:
+          cpuLimit: 1.0
+          memoryLimit: 1.0
+          resourceCpuLimit: '1'
+          resourceMemoryLimit: 1G
+    exec-ingest-data:
+      container:
+        args:
+        - --executor_input
+        - '{{$}}'
+        - --function_to_execute
+        - ingest_data
+        command:
+        - sh
+        - -c
+        - "\nif ! [ -x \"$(command -v pip)\" ]; then\n    python3 -m ensurepip ||\
+          \ python3 -m ensurepip --user || apt-get install python3-pip\nfi\n\nPIP_DISABLE_PIP_VERSION_CHECK=1\
+          \ python3 -m pip install --quiet --no-warn-script-location 'pandas==2.2.2'\
+          \ 'numpy==1.26.4' 'scipy==1.13.1' 'statsmodels==0.14.2' 'requests'  && \
+          \ python3 -m pip install --quiet --no-warn-script-location 'kfp==2.18.1'\
+          \ '--no-deps' 'typing-extensions>=3.7.4,<5; python_version<\"3.9\"' && \"\
+          $0\" \"$@\"\n"
+        - sh
+        - -ec
+        - 'program_path=$(mktemp -d)
+
+
+          printf "%s" "$0" > "$program_path/ephemeral_component.py"
+
+          _KFP_RUNTIME=true python3 -m kfp.dsl.executor_main                         --component_module_path                         "$program_path/ephemeral_component.py"                         "$@"
+
+          '
+        - "\nimport kfp\nfrom kfp import dsl\nfrom kfp.dsl import *\nfrom typing import\
+          \ *\n\ndef ingest_data(raw_data: Output[Dataset], days: int = 730):\n  \
+          \  \"\"\"Download daily BTC OHLCV data (Binance, fallback CoinGecko).\"\"\
+          \"\n    import pandas as pd\n    import requests\n\n    cols = [\"Date\"\
+          , \"Open\", \"High\", \"Low\", \"Close\", \"Volume\"]\n    df = None\n \
+          \   for host in [\"https://data-api.binance.vision\", \"https://api.binance.com\"\
+          ]:\n        try:\n            r = requests.get(\n                f\"{host}/api/v3/klines\"\
+          ,\n                params={\"symbol\": \"BTCUSDT\", \"interval\": \"1d\"\
+          , \"limit\": days},\n                timeout=20,\n            )\n      \
+          \      r.raise_for_status()\n            df = pd.DataFrame(r.json()).iloc[:,\
+          \ :6]\n            df.columns = cols\n            df[\"Date\"] = pd.to_datetime(df[\"\
+          Date\"], unit=\"ms\").dt.date\n            print(f\"Fetched {len(df)} rows\
+          \ from {host}\")\n            break\n        except Exception as e:\n  \
+          \          print(f\"{host} failed: {e}\")\n\n    if df is None:\n      \
+          \  r = requests.get(\n            \"https://api.coingecko.com/api/v3/coins/bitcoin/market_chart\"\
+          ,\n            params={\"vs_currency\": \"usd\", \"days\": min(days, 365),\
+          \ \"interval\": \"daily\"},\n            timeout=20,\n        )\n      \
+          \  r.raise_for_status()\n        j = r.json()\n        df = pd.DataFrame(j[\"\
+          prices\"], columns=[\"ts\", \"Close\"])\n        df[\"Volume\"] = [v[1]\
+          \ for v in j[\"total_volumes\"]]\n        df[\"Date\"] = pd.to_datetime(df[\"\
+          ts\"], unit=\"ms\").dt.date\n        df[\"Open\"] = df[\"High\"] = df[\"\
+          Low\"] = df[\"Close\"]\n        df = df.drop_duplicates(\"Date\", keep=\"\
+          last\")[cols]\n        print(f\"Fetched {len(df)} rows from CoinGecko\"\
+          )\n\n    df.to_csv(raw_data.path, index=False)\n\n"
+        image: python:3.10-slim
+        resources:
+          cpuLimit: 1.0
+          memoryLimit: 1.0
+          resourceCpuLimit: '1'
+          resourceMemoryLimit: 1G
+    exec-train-model:
+      container:
+        args:
+        - --executor_input
+        - '{{$}}'
+        - --function_to_execute
+        - train_model
+        command:
+        - sh
+        - -c
+        - "\nif ! [ -x \"$(command -v pip)\" ]; then\n    python3 -m ensurepip ||\
+          \ python3 -m ensurepip --user || apt-get install python3-pip\nfi\n\nPIP_DISABLE_PIP_VERSION_CHECK=1\
+          \ python3 -m pip install --quiet --no-warn-script-location 'pandas==2.2.2'\
+          \ 'numpy==1.26.4' 'scipy==1.13.1' 'statsmodels==0.14.2' 'requests'  && \
+          \ python3 -m pip install --quiet --no-warn-script-location 'kfp==2.18.1'\
+          \ '--no-deps' 'typing-extensions>=3.7.4,<5; python_version<\"3.9\"' && \"\
+          $0\" \"$@\"\n"
+        - sh
+        - -ec
+        - 'program_path=$(mktemp -d)
+
+
+          printf "%s" "$0" > "$program_path/ephemeral_component.py"
+
+          _KFP_RUNTIME=true python3 -m kfp.dsl.executor_main                         --component_module_path                         "$program_path/ephemeral_component.py"                         "$@"
+
+          '
+        - "\nimport kfp\nfrom kfp import dsl\nfrom kfp.dsl import *\nfrom typing import\
+          \ *\n\ndef train_model(\n    processed_data: Input[Dataset],\n    model:\
+          \ Output[Model],\n    metrics: Output[Metrics],\n    max_mape: float = 15.0,\n\
+          ):\n    \"\"\"Evaluate ARIMA on the last 7 days, then train on all data\
+          \ and save.\"\"\"\n    import pickle\n\n    import numpy as np\n    import\
+          \ pandas as pd\n    from statsmodels.tsa.arima.model import ARIMA\n\n  \
+          \  df = pd.read_csv(processed_data.path, parse_dates=[\"Date\"])\n    y\
+          \ = df[\"Close\"].values\n\n    pred = ARIMA(y[:-7], order=(5, 1, 0)).fit().forecast(steps=7)\n\
+          \    err = y[-7:] - pred\n    mae = float(np.mean(np.abs(err)))\n    rmse\
+          \ = float(np.sqrt(np.mean(err**2)))\n    mape = float(np.mean(np.abs(err\
+          \ / y[-7:])) * 100)\n\n    metrics.log_metric(\"MAE\", mae)\n    metrics.log_metric(\"\
+          RMSE\", rmse)\n    metrics.log_metric(\"MAPE\", mape)\n    print(f\"MAE={mae:.2f}\
+          \ RMSE={rmse:.2f} MAPE={mape:.2f}%\")\n\n    if mape > max_mape:\n     \
+          \   raise ValueError(f\"Model rejected: MAPE {mape:.2f}% > {max_mape}%\"\
+          )\n\n    final = ARIMA(y, order=(5, 1, 0)).fit()\n    with open(model.path,\
+          \ \"wb\") as f:\n        pickle.dump(final, f)\n    model.metadata[\"framework\"\
+          ] = \"statsmodels-ARIMA(5,1,0)\"\n    model.metadata[\"last_date\"] = str(df[\"\
+          Date\"].iloc[-1].date())\n    model.metadata[\"MAPE\"] = mape\n\n"
+        image: python:3.10-slim
+        resources:
+          cpuLimit: 1.0
+          memoryLimit: 1.0
+          resourceCpuLimit: '1'
+          resourceMemoryLimit: 1G
+pipelineInfo:
+  description: Ingest BTC data, build features, train 7-day ARIMA forecaster
+  name: btc-forecast-pipeline
+root:
+  dag:
+    tasks:
+      build-features:
+        cachingOptions:
+          enableCache: true
+        componentRef:
+          name: comp-build-features
+        dependentTasks:
+        - ingest-data
+        inputs:
+          artifacts:
+            raw_data:
+              taskOutputArtifact:
+                outputArtifactKey: raw_data
+                producerTask: ingest-data
+        taskInfo:
+          name: Build features
+      ingest-data:
+        cachingOptions:
+          enableCache: true
+        componentRef:
+          name: comp-ingest-data
+        inputs:
+          parameters:
+            days:
+              componentInputParameter: days
+        taskInfo:
+          name: Ingest BTC data
+      train-model:
+        cachingOptions:
+          enableCache: true
+        componentRef:
+          name: comp-train-model
+        dependentTasks:
+        - build-features
+        inputs:
+          artifacts:
+            processed_data:
+              taskOutputArtifact:
+                outputArtifactKey: processed_data
+                producerTask: build-features
+          parameters:
+            max_mape:
+              componentInputParameter: max_mape
+        taskInfo:
+          name: Train & evaluate model
+  inputDefinitions:
+    parameters:
+      days:
+        defaultValue: 730.0
+        isOptional: true
+        parameterType: NUMBER_INTEGER
+      max_mape:
+        defaultValue: 15.0
+        isOptional: true
+        parameterType: NUMBER_DOUBLE
+schemaVersion: 2.1.0
+sdkVersion: kfp-2.18.1
