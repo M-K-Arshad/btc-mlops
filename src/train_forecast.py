@@ -10,9 +10,11 @@ from statsmodels.tsa.arima.model import ARIMA
 
 def evaluate(y, p):
     e = y - p
-    return {"MAE": float(np.mean(np.abs(e))),
-            "RMSE": float(np.sqrt(np.mean(e**2))),
-            "MAPE": float(np.mean(np.abs(e / y)) * 100)}
+    return {
+        "MAE": float(np.mean(np.abs(e))),
+        "RMSE": float(np.sqrt(np.mean(e**2))),
+        "MAPE": float(np.mean(np.abs(e / y)) * 100),
+    }
 
 
 def train(data="data/processed/btc_features.csv", model_dir="models", max_mape=10.0):
@@ -25,9 +27,11 @@ def train(data="data/processed/btc_features.csv", model_dir="models", max_mape=1
     final = ARIMA(close, order=(5, 1, 0)).fit()
     os.makedirs(model_dir, exist_ok=True)
     joblib.dump(final, f"{model_dir}/model.pkl")
-    meta = {"version": datetime.utcnow().strftime("%Y%m%d%H%M%S"),
-            "last_date": df["Date"].iloc[-1].strftime("%Y-%m-%d"),
-            "metrics": metrics}
+    meta = {
+        "version": datetime.utcnow().strftime("%Y%m%d%H%M%S"),
+        "last_date": df["Date"].iloc[-1].strftime("%Y-%m-%d"),
+        "metrics": metrics,
+    }
     with open(f"{model_dir}/metrics.json", "w") as f:
         json.dump(meta, f, indent=2)
     return meta
@@ -35,7 +39,11 @@ def train(data="data/processed/btc_features.csv", model_dir="models", max_mape=1
 
 if __name__ == "__main__":
     import sys
+
     sys.path.insert(0, "src")
     from etl_fetch import fetch_btc
     from preprocess import preprocess
-    fetch_btc(); preprocess(); print(train())
+
+    fetch_btc()
+    preprocess()
+    print(train())
