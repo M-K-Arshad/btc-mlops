@@ -1,12 +1,11 @@
 import json
 import os
+import pickle
 from datetime import datetime
 
-import joblib
 import numpy as np
 import pandas as pd
 from statsmodels.tsa.arima.model import ARIMA
-
 
 def evaluate(y, p):
     e = y - p
@@ -26,7 +25,8 @@ def train(data="data/processed/btc_features.csv", model_dir="models", max_mape=1
         raise ValueError(f"Rejected: MAPE {metrics['MAPE']:.2f}% > {max_mape}%")
     final = ARIMA(close, order=(5, 1, 0)).fit()
     os.makedirs(model_dir, exist_ok=True)
-    joblib.dump(final, f"{model_dir}/model.pkl")
+    with open(os.path.join(model_dir, "model.pkl"), "wb") as f:
+        pickle.dump(final, f)
     meta = {
         "version": datetime.utcnow().strftime("%Y%m%d%H%M%S"),
         "last_date": df["Date"].iloc[-1].strftime("%Y-%m-%d"),

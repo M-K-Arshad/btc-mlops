@@ -26,6 +26,7 @@ services:
       AIRFLOW__CORE__EXECUTOR: LocalExecutor
       AIRFLOW__CORE__LOAD_EXAMPLES: "false"
       _PIP_ADDITIONAL_REQUIREMENTS: "yfinance requests joblib statsmodels==0.14.2 numpy==1.26.4"
+      AIRFLOW__SCHEDULER__DAG_DIR_LIST_INTERVAL: "30"
     volumes:
       - ./dags:/opt/airflow/dags
       - ./src:/opt/airflow/src

@@ -1,9 +1,9 @@
 import json
 import os
+import pickle
 import time
 from datetime import date, datetime, timedelta
 
-import joblib
 from flask import Flask, jsonify, request
 from statsmodels.tsa.arima.model import ARIMA
 
@@ -18,13 +18,31 @@ STATE = {"model": None, "meta": {}}
 
 
 def load_model():
+    """Load the first valid model. Only swap it in if loading fully succeeds."""
+    errors = []
     for d in MODEL_DIRS:
-        if os.path.exists(os.path.join(d, "model.pkl")):
-            STATE["model"] = joblib.load(os.path.join(d, "model.pkl"))
+        path = os.path.join(d, "model.pkl")
+        if not os.path.exists(path):
+            continue
+        try:
+            with open(path, "rb") as f:
+                model = pickle.load(f)
             with open(os.path.join(d, "metrics.json")) as f:
-                STATE["meta"] = json.load(f)
+                meta = json.load(f)
+            STATE["model"], STATE["meta"] = model, meta
             return True
+        except Exception as e:
+            errors.append(f"{d}: {e}")
+            app.logger.exception("Failed to load model from %s", d)
+    if errors:
+        raise RuntimeError("; ".join(errors))
     return False
+
+
+try:
+    load_model()
+except Exception:
+    app.logger.exception("Startup model load failed")
 
 
 load_model()
