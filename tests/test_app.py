@@ -38,3 +38,10 @@ def test_predict_with_history():
     r = client.post("/predict", json={"forecast_days": 7, "history": hist})
     assert r.status_code == 200
     assert len(r.json["forecast"]) == 7
+
+
+def test_reload_requires_api_key(monkeypatch):
+    monkeypatch.setenv("API_KEY", "secret123")
+    assert client.post("/reload").status_code == 401
+    r = client.post("/reload", headers={"X-API-Key": "secret123"})
+    assert r.status_code in (200, 500)

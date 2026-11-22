@@ -55,6 +55,7 @@ def health():
         uptime_seconds=round(time.time() - START, 1),
         model_loaded=STATE["model"] is not None,
         model_version=STATE["meta"].get("version", "none"),
+        model_stage=os.getenv("MODEL_STAGE", "development"),
     )
 
 
@@ -112,10 +113,17 @@ def predict():
 
 @app.post("/reload")
 def reload_model():
-    if load_model():
-        return jsonify(status="reloaded", model_version=STATE["meta"]["version"])
-    return jsonify(error="No model found"), 500
+    api_key = os.getenv("API_KEY")
+    if api_key and request.headers.get("X-API-Key") != api_key:
+        return jsonify(error="Unauthorized: invalid or missing X-API-Key"), 401
+    try:
+        if load_model():
+            return jsonify(status="reloaded", model_version=STATE["meta"]["version"])
+        return jsonify(error="No model found"), 500
+    except Exception as e:
+        return jsonify(error=f"Reload failed: {e}"), 500
 
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=int(os.getenv("PORT", 5000)))
+    app.logger.setLevel(os.getenv("LOG_LEVEL", "INFO"))
