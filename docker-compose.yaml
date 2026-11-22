@@ -1,0 +1,51 @@
+services:
+  postgres:
+    image: postgres:15
+    container_name: btc-postgres
+    environment:
+      POSTGRES_USER: airflow
+      POSTGRES_PASSWORD: airflow
+      POSTGRES_DB: airflow
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: [ "CMD", "pg_isready", "-U", "airflow" ]
+      interval: 5s
+      retries: 10
+
+  airflow:
+    image: apache/airflow:2.9.3-python3.10
+    container_name: btc-airflow
+    command: standalone
+    user: "${AIRFLOW_UID:-50000}:0"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://airflow:airflow@postgres/airflow
+      AIRFLOW__CORE__EXECUTOR: LocalExecutor
+      AIRFLOW__CORE__LOAD_EXAMPLES: "false"
+      _PIP_ADDITIONAL_REQUIREMENTS: "yfinance requests joblib statsmodels==0.14.2 numpy==1.26.4"
+    volumes:
+      - ./dags:/opt/airflow/dags
+      - ./src:/opt/airflow/src
+      - ./data:/opt/airflow/data
+      - ./models:/opt/airflow/models
+    ports:
+      - "8080:8080"
+
+  api:
+    build:
+      context: .
+      dockerfile: app/Dockerfile
+    image: btc-forecast-api:latest
+    container_name: btc-api
+    environment:
+      MODEL_DIR: /app/models
+    volumes:
+      - ./models:/app/models
+    ports:
+      - "5000:5000"
+
+volumes:
+  postgres-data:
