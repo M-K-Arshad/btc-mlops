@@ -7,6 +7,7 @@ import numpy as np
 import pandas as pd
 from statsmodels.tsa.arima.model import ARIMA
 
+
 def evaluate(y, p):
     e = y - p
     return {

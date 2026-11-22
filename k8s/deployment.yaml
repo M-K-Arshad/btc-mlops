@@ -1,0 +1,64 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: btc-api
+  labels: { app: btc-api }
+spec:
+  replicas: 3
+  revisionHistoryLimit: 5
+  strategy:
+    type: RollingUpdate
+    rollingUpdate: { maxSurge: 1, maxUnavailable: 0 }
+  selector:
+    matchLabels: { app: btc-api }
+  template:
+    metadata:
+      labels: { app: btc-api }
+    spec:
+      # Gives the non-root app user (uid 1001) write access to the PVC
+      initContainers:
+        - name: fix-permissions
+          image: busybox:1.36
+          command: ["sh", "-c", "chown -R 1001:1001 /app/models"]
+          volumeMounts:
+            - { name: model-storage, mountPath: /app/models }
+      containers:
+        - name: btc-api
+          image: kamranarshad660/btc-forecast-api:latest
+          imagePullPolicy: Always
+          command:
+            [
+              "sh",
+              "-c",
+              "gunicorn --workers ${GUNICORN_WORKERS} --timeout 60 --bind 0.0.0.0:${PORT} app:app",
+            ]
+          ports:
+            - { name: http, containerPort: 5000 }
+          envFrom:
+            - configMapRef: { name: btc-config }
+            - secretRef: { name: btc-secret }
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 1001
+            allowPrivilegeEscalation: false
+          resources:
+            requests: { cpu: 100m, memory: 128Mi }
+            limits: { cpu: 500m, memory: 512Mi }
+          livenessProbe:
+            httpGet: { path: /health, port: 5000 }
+            initialDelaySeconds: 15
+            periodSeconds: 10
+            timeoutSeconds: 3
+            failureThreshold: 3
+          readinessProbe:
+            httpGet: { path: /health, port: 5000 }
+            initialDelaySeconds: 5
+            periodSeconds: 5
+            timeoutSeconds: 3
+            failureThreshold: 3
+          volumeMounts:
+            - { name: model-storage, mountPath: /app/models }
+      volumes:
+        - name: model-storage
+          persistentVolumeClaim:
+            claimName: btc-models-pvc
