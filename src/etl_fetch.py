@@ -39,7 +39,11 @@ def _from_binance(days):
 def _from_coingecko(days):
     r = requests.get(
         "https://api.coingecko.com/api/v3/coins/bitcoin/market_chart",
-        params={"vs_currency": "usd", "days": min(days, 365), "interval": "daily"},
+        params={
+            "vs_currency": "usd",
+            "days": min(days, 365),
+            "interval": "daily",
+        },
         timeout=20,
     )
     r.raise_for_status()
@@ -67,4 +71,6 @@ def fetch_btc(out="data/raw/btc.csv", period="2y", days=730):
             return out
         except Exception as e:
             print(f"{name} failed: {e}")
-    raise RuntimeError("All data sources failed - check your internet connection")
+    raise RuntimeError(
+        "All data sources failed - check your internet connection"
+    )

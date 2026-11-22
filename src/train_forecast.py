@@ -17,13 +17,17 @@ def evaluate(y, p):
     }
 
 
-def train(data="data/processed/btc_features.csv", model_dir="models", max_mape=10.0):
+def train(
+    data="data/processed/btc_features.csv", model_dir="models", max_mape=10.0
+):
     df = pd.read_csv(data, parse_dates=["Date"])
     close = df["Close"].values
     test_pred = ARIMA(close[:-7], order=(5, 1, 0)).fit().forecast(steps=7)
     metrics = evaluate(close[-7:], test_pred)
     if metrics["MAPE"] > max_mape:
-        raise ValueError(f"Rejected: MAPE {metrics['MAPE']:.2f}% > {max_mape}%")
+        raise ValueError(
+            f"Rejected: MAPE {metrics['MAPE']:.2f}% > {max_mape}%"
+        )
     final = ARIMA(close, order=(5, 1, 0)).fit()
     os.makedirs(model_dir, exist_ok=True)
     joblib.dump(final, f"{model_dir}/model.pkl")

@@ -9,7 +9,11 @@ from statsmodels.tsa.arima.model import ARIMA
 
 app = Flask(__name__)
 START = time.time()
-MODEL_DIRS = [os.getenv("MODEL_DIR", "/app/models"), "/app/bundled_models", "models"]
+MODEL_DIRS = [
+    os.getenv("MODEL_DIR", "/app/models"),
+    "/app/bundled_models",
+    "models",
+]
 STATE = {"model": None, "meta": {}}
 
 
@@ -62,14 +66,19 @@ def predict():
                 or len(history) < 30
                 or not all(isinstance(x, (int, float)) for x in history)
             ):
-                return jsonify(error="history must be a list of >= 30 numbers"), 400
+                return (
+                    jsonify(error="history must be a list of >= 30 numbers"),
+                    400,
+                )
             model = ARIMA(history, order=(5, 1, 0)).fit()
             start = date.today()
         else:
             if STATE["model"] is None:
                 return jsonify(error="Model not loaded"), 503
             model = STATE["model"]
-            start = datetime.strptime(STATE["meta"]["last_date"], "%Y-%m-%d").date()
+            start = datetime.strptime(
+                STATE["meta"]["last_date"], "%Y-%m-%d"
+            ).date()
 
         preds = model.forecast(steps=days)
         forecast = [
@@ -88,7 +97,9 @@ def predict():
 @app.post("/reload")
 def reload_model():
     if load_model():
-        return jsonify(status="reloaded", model_version=STATE["meta"]["version"])
+        return jsonify(
+            status="reloaded", model_version=STATE["meta"]["version"]
+        )
     return jsonify(error="No model found"), 500
 
 
